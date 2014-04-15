@@ -1,1 +1,1 @@
-This is a demo app for [remoteStorage.js](http://remotestorage.io/integrate/).
+This is a demo encrypted app for [remoteStorage.js](http://remotestorage.io/integrate/).

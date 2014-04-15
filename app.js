@@ -2,43 +2,44 @@
   var inputElement;
   var formElement;
   var ulElement;
-  var drinkRowPrefix = 'drinkrow-';
+  var secretRowPrefix = 'secretrow-';
 
   function prefixId(id) {
-    return drinkRowPrefix + id;
+    return secretRowPrefix + id;
   }
+
   function unprefixId(prefixedId) {
-    return prefixedId.replace(drinkRowPrefix, '');
+    return prefixedId.replace(secretRowPrefix, '');
   }
 
   function init() {
-    formElement = document.getElementById('add-drink');
+    formElement = document.getElementById('add-secret');
     inputElement = formElement.getElementsByTagName('input')[0];
-    ulElement = document.getElementById('drink-list');
+    ulElement = document.getElementById('secret-list');
 
-    remoteStorage.access.claim('myfavoritedrinks', 'rw');
+    remoteStorage.access.claim('encryptedrs', 'rw');
     remoteStorage.displayWidget();
-    remoteStorage.myfavoritedrinks.init();
-    remoteStorage.myfavoritedrinks.on('change', function(event) {
+    remoteStorage.encryptedrs.init();
+    remoteStorage.encryptedrs.on('change', function(event) {
       // add
       if(event.newValue && (! event.oldValue)) {
-        displayDrink(event.relativePath, event.newValue.name);
+        displaySecret(event.relativePath, event.newValue.name);
       }
       // remove
       else if((! event.newValue) && event.oldValue) {
-        undisplayDrink(event.relativePath);
+        undisplaySecret(event.relativePath);
       }
     });
 
     remoteStorage.on('ready', function() {
 
       remoteStorage.on('disconnected', function() {
-        emptyDrinks();
+        emptySecrets();
       });
 
       ulElement.addEventListener('click', function(event) {
         if(event.target.tagName === 'SPAN') {
-          removeDrink(unprefixId(event.target.parentNode.id));
+          removeSecret(unprefixId(event.target.parentNode.id));
         }
       });
 
@@ -46,7 +47,7 @@
         event.preventDefault();
         var trimmedText = inputElement.value.trim();
         if(trimmedText) {
-          addDrink(trimmedText);
+          addSecret(trimmedText);
         }
         inputElement.value = '';
       });
@@ -54,21 +55,21 @@
     });
   }
 
-  function addDrink(name) {
-    remoteStorage.myfavoritedrinks.addDrink(name);
+  function addSecret(name) {
+    remoteStorage.encryptedrs.addSecret(name);
   }
 
-  function removeDrink(id) {
-    remoteStorage.myfavoritedrinks.removeDrink(id);
+  function removeSecret(id) {
+    remoteStorage.encryptedrs.removeSecret(id);
   }
 
-  function displayDrinks(drinks) {
-    for(var drinkId in drinks) {
-      displayDrink(drinkId, drinks[drinkId].name);
+  function displaySecrets(secrets) {
+    for(var secretId in secrets) {
+      displaySecret(secretId, secrets[secretId].name);
     }
   }
 
-  function displayDrink(id, name) {
+  function displaySecret(id, name) {
     var domID = prefixId(id);
     var liElement = document.getElementById(domID);
     if(! liElement) {
@@ -80,12 +81,12 @@
     liElement.innerHTML += ' <span title="Delete">×</span>';
   }
 
-  function undisplayDrink(id) {
+  function undisplaySecret(id) {
     var elem = document.getElementById(prefixId(id));
     ulElement.removeChild(elem);
   }
 
-  function emptyDrinks() {
+  function emptySecrets() {
     ulElement.innerHTML = '';
     inputElement.value = '';
   }

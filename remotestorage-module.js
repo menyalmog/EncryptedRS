@@ -1,4 +1,4 @@
-RemoteStorage.defineModule('myfavoritedrinks', function(privateClient) {
+RemoteStorage.defineModule('encryptedrs', function(privateClient) {
 
   return {
     exports: {
@@ -9,16 +9,16 @@ RemoteStorage.defineModule('myfavoritedrinks', function(privateClient) {
 
       on: privateClient.on,
 
-      addDrink: function(name) {
+      addSecret: function(name) {
         var id = name.toLowerCase().replace(/\s|\//g, '-');
-        return privateClient.storeObject('drink', id, {
+        return privateClient.storeObject('secret', id, {
           name: name
         });
       },
 
-      removeDrink: privateClient.remove.bind(privateClient),
+      removeSecret: privateClient.remove.bind(privateClient),
 
-      listDrinks: function() {
+      listSecrets: function() {
         return privateClient.getAll('');
       }
 

@@ -1,13 +1,9 @@
 html { background:#000; }
 body { width:480px; margin:50px; padding:0; color:#fff; font:normal 1.5em/150% FreeSans,Helvetica,sans-serif; }
 
-#background { width:100%; position:fixed; top:-100px; left:0; z-index:-1; }
-#background-credit { position:fixed; bottom:5px; right:10px; font-size:10px; opacity:.3; white-space:nowrap; }
-#background-credit a { color:#fff; }
-
-#add-drink input { float:left; width:380px; height:30px; padding:10px; font-size:24px; border:none;}
-#add-drink button { width:80px; height:50px; padding:10px; font-size:24px; background:#ccc; border:none; cursor:pointer; }
-#add-drink button:hover { background:#aaa; }
+#add-secret input { float:left; width:380px; height:30px; padding:10px; font-size:24px; border:none;}
+#add-secret button { width:80px; height:50px; padding:10px; font-size:24px; background:#ccc; border:none; cursor:pointer; }
+#add-secret button:hover { background:#aaa; }
 
 li span { cursor:pointer; opacity:.3; }
 li span:hover { opacity:1; }
