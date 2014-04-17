@@ -1,4 +1,5 @@
 (function() {
+  var secretKey = 'Patience';
   var inputElement;
   var formElement;
   var ulElement;
@@ -56,6 +57,7 @@
   }
 
   function addSecret(name) {
+	name = sjcl.encrypt(secretKey, name, { 'mode': 'gcm' });
     remoteStorage.encryptedrs.addSecret(name);
   }
 
@@ -77,6 +79,7 @@
       liElement.id = domID;
       ulElement.appendChild(liElement);
     }
+	name = sjcl.decrypt(secretKey, name);
     liElement.appendChild(document.createTextNode(name));//this will do some html escaping
     liElement.innerHTML += ' <span title="Delete">×</span>';
   }
