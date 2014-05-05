@@ -1,5 +1,4 @@
 (function() {
-  var secretKey = 'Patience';
   var inputElement;
   var formElement;
   var ulElement;
@@ -19,18 +18,29 @@
     ulElement = document.getElementById('secret-list');
 
     remoteStorage.access.claim('encryptedrs', 'rw');
-    remoteStorage.displayWidget();
+    remoteStorage.displayWidget('remotestorage-connect', true);
     remoteStorage.encryptedrs.init();
     remoteStorage.encryptedrs.on('change', function(event) {
-      // add
-      if(event.newValue && (! event.oldValue)) {
-        displaySecret(event.relativePath, event.newValue.name);
-      }
-      // remove
-      else if((! event.newValue) && event.oldValue) {
-        undisplaySecret(event.relativePath);
-      }
+	  if (remoteStorage.widget.view.userSecretKey) {
+        // add
+        if(event.newValue && (! event.oldValue)) {
+          displaySecret(event.relativePath, event.newValue.name);
+        }
+        // remove
+        else if((! event.newValue) && event.oldValue) {
+          undisplaySecret(event.relativePath);
+        }
+	  }
     });
+
+	// Trigger listSecrets cause change event might occur before the key is ready
+    remoteStorage.widget.view.on('encrypt', function() {
+	  if (remoteStorage.widget.view.userSecretKey) {
+		remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
+			displaySecrets(secrets);
+		});
+	  }
+	});
 
     remoteStorage.on('ready', function() {
 
@@ -57,7 +67,7 @@
   }
 
   function addSecret(name) {
-	name = sjcl.encrypt(secretKey, name, { 'mode': 'gcm' });
+	name = sjcl.encrypt(remoteStorage.widget.view.userSecretKey, name, { 'mode': 'gcm' });
     remoteStorage.encryptedrs.addSecret(name);
   }
 
@@ -79,7 +89,7 @@
       liElement.id = domID;
       ulElement.appendChild(liElement);
     }
-	name = sjcl.decrypt(secretKey, name);
+	name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
     liElement.appendChild(document.createTextNode(name));//this will do some html escaping
     liElement.innerHTML += ' <span title="Delete">×</span>';
   }

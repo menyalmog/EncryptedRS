@@ -19,7 +19,7 @@ RemoteStorage.defineModule('encryptedrs', function(privateClient) {
       removeSecret: privateClient.remove.bind(privateClient),
 
       listSecrets: function() {
-        return privateClient.getAll('');
+        return privateClient.getAll('', arguments);
       }
 
     }
