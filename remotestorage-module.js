@@ -1,5 +1,15 @@
 RemoteStorage.defineModule('encryptedrs', function(privateClient) {
 
+  privateClient.declareType('secret', {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": ["name"]
+  });
+
   return {
     exports: {
 

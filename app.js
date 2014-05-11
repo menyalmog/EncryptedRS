@@ -89,7 +89,9 @@
       liElement.id = domID;
       ulElement.appendChild(liElement);
     }
-	name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
+	if (JSON.parse(name)) {
+	  name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
+	}
     liElement.appendChild(document.createTextNode(name));//this will do some html escaping
     liElement.innerHTML += ' <span title="Delete">×</span>';
   }

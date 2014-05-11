@@ -249,7 +249,7 @@
     RemoteStorage.eventHandling(
       this, 'ready', 'connected', 'disconnected', 'not-connected', 'conflict',
             'error', 'features-loaded', 'connecting', 'authing', 'wire-busy',
-            'wire-done'
+            'wire-done', 'sync-interval-change'
     );
 
     // pending get/put/delete calls.
@@ -1815,6 +1815,14 @@
   RemoteStorage.Env._rs_init = function(remoteStorage) {
     RemoteStorage.eventHandling(RemoteStorage.Env, "background", "foreground");
 
+    function visibility() {
+      if (document[env.hiddenProperty]) {
+        RemoteStorage.Env.goBackground();
+      } else {
+        RemoteStorage.Env.goForeground();
+      }
+    }
+
     if ( mode === 'browser') {
       if ( typeof(document.hidden) !== "undefined" ) {
         env.hiddenProperty = "hidden";
@@ -1829,13 +1837,8 @@
         env.hiddenProperty = "webkitHidden";
         env.visibilityChangeEvent = "webkitvisibilitychange";
       }
-      document.addEventListener(env.visibilityChangeEvent, function () {
-        if ( document[env.hiddenProperty] ) {
-          RemoteStorage.Env.goBackground();
-        } else {
-          RemoteStorage.Env.goForeground();
-        }
-      }, false);
+      document.addEventListener(env.visibilityChangeEvent, visibility, false);
+      visibility();
     }
   };
 
@@ -2028,9 +2031,6 @@ RemoteStorage.Assets = {
       }.bind(this));
 
       this.view.on('encrypt', function(secretKey) {
-		if (sjcl && sjcl.misc) {
-		  secretKey = sjcl.misc.cachedPbkdf2(secretKey).key;
-		}
         this.view.setUserSecretKey(secretKey);
 		stateSetter(this, 'encrypted')();
       }.bind(this));
@@ -4362,7 +4362,9 @@ Math.uuid = function (len, radix) {
 /** FILE: src/sync.js **/
 (function(global) {
 
-  var syncInterval = 10000;
+  var syncInterval = 10000,
+      backgroundSyncInterval = 60000,
+      isBackground = false;
 
   function taskFor(action, path, promise) {
     return {
@@ -4418,6 +4420,36 @@ Math.uuid = function (len, radix) {
 
   function isFolder(path) {
     return path.substr(-1) === '/';
+  }
+
+  function handleVisibility() {
+    var hidden,
+        visibilityChange,
+        rs = this;
+
+    function handleVisibilityChange(fg) {
+      var oldValue, newValue;
+      oldValue = rs.getCurrentSyncInterval();
+      isBackground = !fg;
+      newValue = rs.getCurrentSyncInterval();
+      rs._emit('sync-interval-change', {oldValue: oldValue, newValue: newValue});
+    }
+
+    RemoteStorage.Env.on("background", function () {
+      handleVisibilityChange(false);
+    });
+
+    RemoteStorage.Env.on("foreground", function () {
+      handleVisibilityChange(true);
+    });
+  }
+
+  /**
+   * Check if interval is valid: numeric and between 1000ms and 3600000ms
+   *
+   */
+  function isValidInterval(interval) {
+    return (typeof interval === 'number' && interval > 1000 && interval < 3600000);
   }
 
   /**
@@ -4761,7 +4793,15 @@ Math.uuid = function (len, radix) {
     },
 
     autoMergeDocument: function(node) {
-      if (node.remote.body !== undefined) {
+      hasNoRemoteChanges = function(node) {
+        return (node.common.body === undefined && node.remote.body === false) ||
+               (node.remote.body === node.common.body &&
+                node.remote.contentType === node.common.contentType);
+      };
+
+      if (hasNoRemoteChanges(node)) {
+        delete node.remote;
+      } else if (node.remote.body !== undefined) {
         // keep/revert:
         RemoteStorage.log('[Sync] Emitting keep/revert');
 
@@ -5346,14 +5386,54 @@ Math.uuid = function (len, radix) {
    *
    */
   RemoteStorage.prototype.setSyncInterval = function(interval) {
-    if (typeof(interval) !== 'number') {
+    if (!isValidInterval(interval)) {
       throw interval + " is not a valid sync interval";
     }
+    var oldValue = syncInterval;
     syncInterval = parseInt(interval, 10);
-    if (this._syncTimer) {
-      this.stopSync();
-      this._syncTimer = setTimeout(this.syncCycle.bind(this), interval);
+    this._emit('sync-interval-change', {oldValue: oldValue, newValue: interval});
+  };
+
+  /**
+   * Method: getBackgroundSyncInterval
+   *
+   * Get the value of the sync interval when application is in the background
+   *
+   * Returns a number of milliseconds
+   *
+   */
+  RemoteStorage.prototype.getBackgroundSyncInterval = function() {
+    return backgroundSyncInterval;
+  };
+
+  /**
+   * Method: setBackgroundSyncInterval
+   *
+   * Set the value of the sync interval when the application is in the background
+   *
+   * Parameters:
+   *   interval - sync interval in milliseconds
+   *
+   */
+  RemoteStorage.prototype.setBackgroundSyncInterval = function(interval) {
+    if(!isValidInterval(interval)) {
+      throw interval + " is not a valid sync interval";
     }
+    var oldValue = backgroundSyncInterval;
+    backgroundSyncInterval = parseInt(interval, 10);
+    this._emit('sync-interval-change', {oldValue: oldValue, newValue: interval});
+  };
+
+  /**
+   * Method: getCurrentSyncInterval
+   *
+   * Get the value of the current sync interval
+   *
+   * Returns a number of milliseconds
+   *
+   */
+  RemoteStorage.prototype.getCurrentSyncInterval = function() {
+    return isBackground ? backgroundSyncInterval : syncInterval;
   };
 
   var SyncError = function(originalError) {
@@ -5377,12 +5457,12 @@ Math.uuid = function (len, radix) {
     }
 
     this.sync.on('done', function() {
-      RemoteStorage.log('[Sync] Sync done. Setting timer to', this.getSyncInterval());
+      RemoteStorage.log('[Sync] Sync done. Setting timer to', this.getCurrentSyncInterval());
       if (!this.sync.stopped) {
         if (this._syncTimer) {
           clearTimeout(this._syncTimer);
         }
-        this._syncTimer = setTimeout(this.sync.sync.bind(this.sync), this.getSyncInterval());
+        this._syncTimer = setTimeout(this.sync.sync.bind(this.sync), this.getCurrentSyncInterval());
       }
     }.bind(this));
 
@@ -5411,7 +5491,9 @@ Math.uuid = function (len, radix) {
   RemoteStorage.Sync._rs_init = function(remoteStorage) {
     syncCycleCb = function() {
       RemoteStorage.log('[Sync] syncCycleCb calling syncCycle');
-
+      if (RemoteStorage.Env.isBrowser()) {
+        handleVisibility.bind(remoteStorage)();
+      }
       if (!remoteStorage.sync) {
         // Call this now that all other modules are also ready:
         remoteStorage.sync = new RemoteStorage.Sync(
@@ -5463,11 +5545,43 @@ Math.uuid = function (len, radix) {
     return path.substr(-1) !== '/';
   }
 
+  /**
+   * Function: fixArrayBuffers
+   *
+   * Takes an object and its copy as produced by the _deepClone function
+   * below, and finds and fixes any ArrayBuffers that were cast to `{}` instead
+   * of being cloned to new ArrayBuffers with the same content.
+   *
+   * It recurses into sub-objects, but skips arrays if they occur.
+   *
+   */
+  function fixArrayBuffers(srcObj, dstObj) {
+    var field, srcArr, dstArr;
+    if (typeof(srcObj) != 'object' || Array.isArray(srcObj) || srcObj === null) {
+      return;
+    }
+    for (field in srcObj) {
+      if (typeof(srcObj[field]) === 'object' && srcObj[field] !== null) {
+        if (srcObj[field].toString() === '[object ArrayBuffer]') {
+          dstObj[field] = new ArrayBuffer(srcObj[field].byteLength);
+          srcArr = new Int8Array(srcObj[field]);
+          dstArr = new Int8Array(dstObj[field]);
+          dstArr.set(srcArr);
+        } else {
+          fixArrayBuffers(srcObj[field], dstObj[field]);
+        }
+      }
+    }
+  }
+
   function deepClone(obj) {
+    var clone;
     if (obj === undefined) {
       return undefined;
     } else {
-      return JSON.parse(JSON.stringify(obj));
+      clone = JSON.parse(JSON.stringify(obj));
+      fixArrayBuffers(obj, clone);
+      return clone;
     }
   }
 
@@ -7466,6 +7580,7 @@ Math.uuid = function (len, radix) {
      **/
     put: function(path, body, contentType, options){
       if (! this.connected) { throw new Error("not connected (path: " + path + ")"); }
+      var pathTempBeforeClean = path; // Temp variable to store the value beafore cleanPath, to be used later
       path = cleanPath(path);
 
       var promise = this._sharePromise(path);
@@ -7496,7 +7611,7 @@ Math.uuid = function (len, radix) {
             var response = JSON.parse(resp.responseText);
             // if dropbox reports an file conflict they just change the name of the file
             // TODO find out which stays the origianl and how to deal with this
-            if (response.path !== path){
+            if (response.path !== pathTempBeforeClean) {
               promise.fulfill(412);
               this.rs.log('Dropbox created conflicting File ', response.path);
             }
@@ -7516,6 +7631,7 @@ Math.uuid = function (len, radix) {
      **/
     'delete': function(path, options){
       if (! this.connected) { throw new Error("not connected (path: " + path + ")"); }
+      var pathTempBeforeClean = path; // Temp variable to store the value before cleanPath, to be used later
       path = cleanPath(path);
 
       var promise = promising();
@@ -7527,7 +7643,7 @@ Math.uuid = function (len, radix) {
         return promise;
       }
 
-      var url = 'https://api.dropbox.com/1/fileops/delete?root=auto&path='+encodeURIComponent(path);
+      var url = 'https://api.dropbox.com/1/fileops/delete?root=auto&path=' + encodeURIComponent(pathTempBeforeClean);
       this._request('POST', url, {}, function(err, resp){
         if (err) {
           promise.reject(error);
