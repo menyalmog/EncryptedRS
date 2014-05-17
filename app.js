@@ -84,14 +84,22 @@
   function displaySecret(id, name) {
     var domID = prefixId(id);
     var liElement = document.getElementById(domID);
+
+	if (JSON.parse(name)) {
+	  try {
+	    name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
+	  } catch (e) {
+	    remoteStorage.widget.view.userSecretKeyError = true;
+		remoteStorage.widget.view.setState('connected');
+		return;
+	  }
+	}
+
     if(! liElement) {
       liElement = document.createElement('li');
       liElement.id = domID;
       ulElement.appendChild(liElement);
     }
-	if (JSON.parse(name)) {
-	  name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
-	}
     liElement.appendChild(document.createTextNode(name));//this will do some html escaping
     liElement.innerHTML += ' <span title="Delete">×</span>';
   }
