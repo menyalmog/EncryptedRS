@@ -21,7 +21,7 @@
     remoteStorage.displayWidget('remotestorage-connect', true);
     remoteStorage.encryptedrs.init();
     remoteStorage.encryptedrs.on('change', function(event) {
-      if (!remoteStorage.widget.view.encryption || remoteStorage.widget.view.userSecretKey) {
+      if (!remoteStorage.widget.view.cipher || remoteStorage.widget.view.userSecretKey) {
         // add
         if(event.newValue && (! event.oldValue)) {
           displaySecret(event.relativePath, event.newValue.name);
@@ -34,7 +34,7 @@
     });
 
     // Trigger listSecrets cause change event might occur before the key is ready
-    remoteStorage.widget.view.on('encrypt', function() {
+    remoteStorage.widget.view.on('cipher', function() {
       if (remoteStorage.widget.view.userSecretKey) {
         remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
           displaySecrets(secrets);
@@ -43,7 +43,7 @@
     });
 
     // Trigger listSecrets cause change event might occur before the key is ready - when unencrypted
-    remoteStorage.widget.view.on('nocrypt', function() {
+    remoteStorage.widget.view.on('nocipher', function() {
       remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
         displaySecrets(secrets);
       });
@@ -74,7 +74,7 @@
   }
 
   function addSecret(name) {
-    if (remoteStorage.widget.view.encryption) {
+    if (remoteStorage.widget.view.cipher) {
       name = sjcl.encrypt(remoteStorage.widget.view.userSecretKey, name, { 'mode': 'gcm' });
     }
     remoteStorage.encryptedrs.addSecret(name);
@@ -94,7 +94,7 @@
     var domID = prefixId(id);
     var liElement = document.getElementById(domID);
 
-    if (remoteStorage.widget.view.encryption && JSON.parse(name)) {
+    if (remoteStorage.widget.view.cipher && JSON.parse(name)) {
       try {
         name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
       } catch (e) {
