@@ -21,7 +21,7 @@
     remoteStorage.displayWidget('remotestorage-connect', true);
     remoteStorage.encryptedrs.init();
     remoteStorage.encryptedrs.on('change', function(event) {
-	  if (remoteStorage.widget.view.userSecretKey) {
+      if (!remoteStorage.widget.view.encryption || remoteStorage.widget.view.userSecretKey) {
         // add
         if(event.newValue && (! event.oldValue)) {
           displaySecret(event.relativePath, event.newValue.name);
@@ -30,17 +30,26 @@
         else if((! event.newValue) && event.oldValue) {
           undisplaySecret(event.relativePath);
         }
-	  }
+      }
     });
 
-	// Trigger listSecrets cause change event might occur before the key is ready
+    // Trigger listSecrets cause change event might occur before the key is ready - when unencrypted
+    remoteStorage.remote.on('connected', function() {
+      if (!remoteStorage.widget.view.encryption) {
+        remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
+            displaySecrets(secrets);
+        });
+      }
+    });
+
+    // Trigger listSecrets cause change event might occur before the key is ready
     remoteStorage.widget.view.on('encrypt', function() {
-	  if (remoteStorage.widget.view.userSecretKey) {
-		remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
-			displaySecrets(secrets);
-		});
-	  }
-	});
+      if (remoteStorage.widget.view.userSecretKey) {
+        remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
+            displaySecrets(secrets);
+        });
+      }
+    });
 
     remoteStorage.on('ready', function() {
 
@@ -67,7 +76,9 @@
   }
 
   function addSecret(name) {
-	name = sjcl.encrypt(remoteStorage.widget.view.userSecretKey, name, { 'mode': 'gcm' });
+    if (remoteStorage.widget.view.encryption) {
+      name = sjcl.encrypt(remoteStorage.widget.view.userSecretKey, name, { 'mode': 'gcm' });
+    }
     remoteStorage.encryptedrs.addSecret(name);
   }
 
@@ -85,15 +96,15 @@
     var domID = prefixId(id);
     var liElement = document.getElementById(domID);
 
-	if (JSON.parse(name)) {
-	  try {
-	    name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
-	  } catch (e) {
-	    remoteStorage.widget.view.userSecretKeyError = true;
-		remoteStorage.widget.view.setState('connected');
-		return;
-	  }
-	}
+    if (remoteStorage.widget.view.encryption && JSON.parse(name)) {
+      try {
+        name = sjcl.decrypt(remoteStorage.widget.view.userSecretKey, name);
+      } catch (e) {
+        remoteStorage.widget.view.userSecretKeyError = true;
+        remoteStorage.widget.view.setState('connected');
+        return;
+      }
+    }
 
     if(! liElement) {
       liElement = document.createElement('li');
