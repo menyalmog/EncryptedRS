@@ -33,22 +33,20 @@
       }
     });
 
-    // Trigger listSecrets cause change event might occur before the key is ready - when unencrypted
-    remoteStorage.remote.on('connected', function() {
-      if (!remoteStorage.widget.view.encryption) {
-        remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
-            displaySecrets(secrets);
-        });
-      }
-    });
-
     // Trigger listSecrets cause change event might occur before the key is ready
     remoteStorage.widget.view.on('encrypt', function() {
       if (remoteStorage.widget.view.userSecretKey) {
         remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
-            displaySecrets(secrets);
+          displaySecrets(secrets);
         });
       }
+    });
+
+    // Trigger listSecrets cause change event might occur before the key is ready - when unencrypted
+    remoteStorage.widget.view.on('nocrypt', function() {
+      remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
+        displaySecrets(secrets);
+      });
     });
 
     remoteStorage.on('ready', function() {

@@ -2036,6 +2036,11 @@ RemoteStorage.Assets = {
         this.view.setUserSecretKey(secretKey);
         stateSetter(this, 'encrypted')();
       }.bind(this));
+
+      this.view.on('nocrypt', function() { 
+        stateSetter(this, 'nocrypted')();
+      }.bind(this));
+
       this.view.on('disconnect', this.rs.disconnect.bind(this.rs));
 
       this.linkWidgetToSync();
@@ -2139,6 +2144,7 @@ RemoteStorage.Assets = {
    *   authing      - in auth flow
    *   connected    - connected to remote storage, not syncing at the moment
    *   encrypted    - connected, encryption secret key exist
+   *   nocrypted    - connected, encryption secret key not supplied
    *   busy         - connected, syncing at the moment
    *   offline      - connected, but no network connectivity
    *   error        - connected, but sync error happened
@@ -2152,6 +2158,7 @@ RemoteStorage.Assets = {
     RemoteStorage.eventHandling(this,
                                 'connect',
                                 'encrypt',
+                                'nocrypt',
                                 'disconnect',
                                 'sync',
                                 'display',
@@ -2266,17 +2273,6 @@ RemoteStorage.Assets = {
     },
 
     /**
-     * Method: nocrypt
-     *
-     * Hide the encryption form
-     **/
-    nocrypt: function(){
-        this.encryption = false;
-        removeClass(this.div.querySelector('.remotestorage-connected'), 'remotestorage-encryption');
-        this.hideBubble();
-    },
-
-    /**
      * Method: display
      *
      * Draw the widget inside of the dom element with the id domID
@@ -2356,7 +2352,7 @@ RemoteStorage.Assets = {
         });
 
         // No crypt button
-        setupButton(element, 'rs-nocrypt', 'nocryptIcon', this.nocrypt.bind(this));
+        setupButton(element, 'rs-nocrypt', 'nocryptIcon', this.events.nocrypt);
       }
 
       // The cube
@@ -2489,6 +2485,12 @@ RemoteStorage.Assets = {
         this.hideBubble();
       },
 
+      nocrypted: function() {
+        this.encryption = false;
+        removeClass(this.div.querySelector('.remotestorage-connected'), 'remotestorage-encryption');
+        this.hideBubble();
+      },
+
       busy: function() {
         this.div.className = "remotestorage-state-busy";
         addClass(this.cube, 'remotestorage-loading');
@@ -2547,6 +2549,17 @@ RemoteStorage.Assets = {
         stopPropagation(event);
         event.preventDefault();
         this._emit('encrypt', this.div.querySelector('form.remotestorage-encrypt').userSecretKey.value);
+      },
+
+    /**
+     * Event: nocrypt
+     *
+     * Emitted when the nocrypt button is clicked
+     **/
+      nocrypt: function(event) {
+        stopPropagation(event);
+        event.preventDefault();
+        this._emit('nocrypt');
       },
 
       /**
