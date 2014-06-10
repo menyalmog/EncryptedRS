@@ -34,7 +34,7 @@
     });
 
     // Trigger listSecrets cause change event might occur before the key is ready
-    remoteStorage.widget.view.on('cipher', function() {
+    remoteStorage.widget.view.on('secret-entered', function() {
       if (remoteStorage.widget.view.userSecretKey) {
         remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
           displaySecrets(secrets);
@@ -43,7 +43,7 @@
     });
 
     // Trigger listSecrets cause change event might occur before the key is ready - when unencrypted
-    remoteStorage.widget.view.on('nocipher', function() {
+    remoteStorage.widget.view.on('secret-cancelled', function() {
       remoteStorage.encryptedrs.listSecrets(1000000).then(function(secrets) {
         displaySecrets(secrets);
       });
