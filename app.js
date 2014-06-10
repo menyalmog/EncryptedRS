@@ -18,7 +18,7 @@
     ulElement = document.getElementById('secret-list');
 
     remoteStorage.access.claim('encryptedrs', 'rw');
-    remoteStorage.displayWidget('remotestorage-connect', true);
+    remoteStorage.displayWidget({'domID': 'remotestorage-connect', 'encryption': true});
     remoteStorage.encryptedrs.init();
     remoteStorage.encryptedrs.on('change', function(event) {
       if (!remoteStorage.widget.view.cipher || remoteStorage.widget.view.userSecretKey) {

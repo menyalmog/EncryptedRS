@@ -1,4 +1,4 @@
-/** remotestorage.js 0.10.0-beta2, http://remotestorage.io, MIT-licensed **/
+/** remotestorage.js 0.10.0-beta3, http://remotestorage.io, MIT-licensed **/
 
 /** FILE: lib/promising.js **/
 (function(global) {
@@ -289,11 +289,12 @@
 
     this._init();
 
-    this.on('ready', function() {
+    this.fireInitial = function() {
       if (this.local) {
         setTimeout(this.local.fireInitial.bind(this.local), 0);
       }
-    }.bind(this));
+    }.bind(this);
+    this.on('ready', this.fireInitial.bind(this));
   };
 
   RemoteStorage.DiscoveryError = function(message) {
@@ -314,11 +315,20 @@
    * You can enable logging with <enableLog>.
    */
   RemoteStorage.log = function() {
-    if (RemoteStorage._log) {
+    if (RemoteStorage.config.logging) {
       console.log.apply(console, arguments);
     }
   };
 
+  RemoteStorage.config = {
+    logging: false,
+    changeEvents: {
+      local:    true,
+      window:   false,
+      remote:   true,
+      conflict: true
+    }
+  };
 
   RemoteStorage.prototype = {
     /**
@@ -338,7 +348,7 @@
     connect: function(userAddress) {
       this.setBackend('remotestorage');
       if (userAddress.indexOf('@') < 0) {
-        this._emit('error', new RemoteStorage.DiscoveryError("User adress doesn't contain an @."));
+        this._emit('error', new RemoteStorage.DiscoveryError("User address doesn't contain an @."));
         return;
       }
       this.remote.configure(userAddress);
@@ -357,7 +367,16 @@
         this._emit('authing');
         this.remote.configure(userAddress, href, storageApi);
         if (! this.remote.connected) {
-          this.authorize(authURL);
+          if (authURL) {
+            this.authorize(authURL);
+          } else {
+            // In lieu of an excplicit authURL, assume that the browser
+            // and server handle any authorization needs; for instance,
+            // TLS may trigger the browser to use a client certificate,
+            // or a 401 Not Authorized response may make the browser
+            // send a Kerberos ticket using the SPNEGO method.
+            this.impliedauth();
+          }
         }
       }.bind(this));
     },
@@ -442,7 +461,7 @@
      * Enable remoteStorage logging
      */
     enableLog: function() {
-      RemoteStorage._log = true;
+      RemoteStorage.config.logging = true;
     },
 
     /**
@@ -451,7 +470,7 @@
      * Disable remoteStorage logging
      */
     disableLog: function() {
-      RemoteStorage._log = false;
+      RemoteStorage.config.logging = false;
     },
 
     /**
@@ -1104,7 +1123,9 @@
       var reqType;
       var self = this;
 
-      headers['Authorization'] = 'Bearer ' + token;
+      if (token !== RemoteStorage.Authorize.IMPLIED_FAKE_TOKEN) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
 
       this._emit('wire-busy', {
         method: method,
@@ -1533,6 +1554,13 @@
     }, {});
   }
 
+  RemoteStorage.ImpliedAuth = function(storageApi, redirectUri) {
+    RemoteStorage.log('ImpliedAuth proceeding due to absent authURL; storageApi = ' + storageApi + ' redirectUri = ' + redirectUri);
+    // Set a fixed access token, signalling to not send it as Bearer
+    remoteStorage.remote.configure(undefined, undefined, undefined, RemoteStorage.Authorize.IMPLIED_FAKE_TOKEN);
+    document.location = redirectUri;
+  };
+
   RemoteStorage.Authorize = function(authURL, scope, redirectUri, clientId) {
     RemoteStorage.log('[Authorize] authURL = ', authURL, 'scope = ', scope, 'redirectUri = ', redirectUri, 'clientId = ', clientId);
 
@@ -1547,6 +1575,8 @@
     url += '&response_type=token';
     RemoteStorage.Authorize.setLocation(url);
   };
+
+  RemoteStorage.Authorize.IMPLIED_FAKE_TOKEN = false;
 
   RemoteStorage.prototype.authorize = function(authURL) {
     this.access.setStorageType(this.remote.storageType);
@@ -1580,6 +1610,10 @@
     } else {
       throw "Invalid location " + location;
     }
+  };
+
+  RemoteStorage.prototype.impliedauth = function() {
+    RemoteStorage.ImpliedAuth(this.remote.storageApi, String(document.location));
   };
 
   RemoteStorage.Authorize._rs_supported = function(remoteStorage) {
@@ -1995,14 +2029,18 @@ RemoteStorage.Assets = {
     *
     * Parameters:
     *
-    *   domID
-    *   cipher
+    *   options
     **/
-    display: function(domID, cipher) {
+    display: function(options) {
+      if (typeof(options) === 'string') {
+        options = { domID: domID };
+      } else if (typeof(options) === 'undefined') {
+        options = {};
+      }
       if (! this.view) {
         this.setView(new RemoteStorage.Widget.View(this.rs));
       }
-      this.view.display.apply(this.view, arguments);
+      this.view.display(options);
       return this;
     },
 
@@ -2032,12 +2070,12 @@ RemoteStorage.Assets = {
         }
       }.bind(this));
 
-      this.view.on('cipher', function(secretKey) {
+      this.view.on('secret-entered', function(secretKey) {
         this.view.setUserSecretKey(secretKey);
         stateSetter(this, 'ciphered')();
       }.bind(this));
 
-      this.view.on('nocipher', function() { 
+      this.view.on('secret-cancelled', function() { 
         stateSetter(this, 'notciphered')();
       }.bind(this));
 
@@ -2070,8 +2108,8 @@ RemoteStorage.Assets = {
    *
    * Same as <display>
    **/
-  RemoteStorage.prototype.displayWidget = function(domID, cipher) {
-    return this.widget.display(domID, cipher);
+  RemoteStorage.prototype.displayWidget = function(options) {
+    return this.widget.display(options);
   };
 
   RemoteStorage.Widget._rs_init = function(remoteStorage) {
@@ -2157,8 +2195,8 @@ RemoteStorage.Assets = {
     }
     RemoteStorage.eventHandling(this,
                                 'connect',
-                                'cipher',
-                                'nocipher',
+                                'secret-entered',
+                                'secret-cancelled',
                                 'disconnect',
                                 'sync',
                                 'display',
@@ -2275,18 +2313,17 @@ RemoteStorage.Assets = {
     /**
      * Method: display
      *
-     * Draw the widget inside of the dom element with the id domID
+     * Draw the widget inside of the dom element with the id options.domID
      *
      * Parameters:
      *
-     *   domID
-     *   cipher
+     *   options
      *
      * Returns:
      *
      *   The widget div
      **/
-    display: function(domID, cipher) {
+    display: function(options) {
       if (typeof this.div !== 'undefined') {
         return this.div;
       }
@@ -2300,10 +2337,10 @@ RemoteStorage.Assets = {
       element.innerHTML = RemoteStorage.Assets.widget;
 
       element.appendChild(style);
-      if (domID) {
-        var parent = document.getElementById(domID);
+      if (options.domID) {
+        var parent = document.getElementById(options.domID);
         if (! parent) {
-          throw "Failed to find target DOM element with id=\"" + domID + "\"";
+          throw "Failed to find target DOM element with id=\"" + options.domID + "\"";
         }
         parent.appendChild(element);
       } else {
@@ -2325,34 +2362,25 @@ RemoteStorage.Assets = {
       // Handle connectButton state
       this.form = element.querySelector('form.remotestorage-initial');
       var el = this.form.userAddress;
-      el.addEventListener('keyup', function(event) {
-        if (event.target.value) {
-          connectButton.removeAttribute('disabled');
-        } else {
-          connectButton.setAttribute('disabled','disabled');
-        }
-      });
+      el.addEventListener('load', handleButtonState);
+      el.addEventListener('keyup', handleButtonState);
       if (this.userAddress) {
         el.value = this.userAddress;
       }
 
-      if (cipher) {
+      if (options.encryption) {
         this.cipher = true;
 
         // Cipher button
-        var cipherButton = setupButton(element, 'rs-cipher', 'cipherIcon', this.events.cipher);
+        var cipherButton = setupButton(element, 'rs-cipher', 'cipherIcon', this.events['secret-entered']);
 
         // Handle cipherButton state
-        element.querySelector('form.remotestorage-cipher-form').userSecretKey.addEventListener('keyup', function(event) {
-          if (event.target.value) {
-            cipherButton.removeAttribute('disabled');
-          } else {
-            cipherButton.setAttribute('disabled','disabled');
-          }
-        });
+        element.querySelector('form.remotestorage-cipher-form').userSecretKey
+          .addEventListener('load', handleButtonState)
+          .addEventListener('keyup', handleButtonState);
 
         // No cipher button
-        setupButton(element, 'rs-nocipher', 'nocipherIcon', this.events.nocipher);
+        setupButton(element, 'rs-nocipher', 'nocipherIcon', this.events['secret-cancelled']);
       }
 
       // The cube
@@ -2495,9 +2523,6 @@ RemoteStorage.Assets = {
       busy: function() {
         this.div.className = "remotestorage-state-busy";
         addClass(this.cube, 'remotestorage-loading');
-        if (!this.cipher) {
-          this.hideBubble();
-        }
       },
 
       offline: function() {
@@ -2542,25 +2567,25 @@ RemoteStorage.Assets = {
       },
 
     /**
-     * Event: cipher
+     * Event: secret-entered
      *
      * Emitted when the cipher button is clicked
      **/
-      cipher: function(event) {
+      'secret-entered': function(event) {
         stopPropagation(event);
         event.preventDefault();
-        this._emit('cipher', this.div.querySelector('form.remotestorage-cipher-form').userSecretKey.value);
+        this._emit('secret-entered', this.div.querySelector('form.remotestorage-cipher-form').userSecretKey.value);
       },
 
     /**
-     * Event: nocipher
+     * Event: secret-cancelled
      *
      * Emitted when the nocipher button is clicked
      **/
-      nocipher: function(event) {
+      'secret-cancelled': function(event) {
         stopPropagation(event);
         event.preventDefault();
-        this._emit('nocipher');
+        this._emit('secret-cancelled');
       },
 
       /**
@@ -2656,6 +2681,14 @@ RemoteStorage.Assets = {
     }
     element.addEventListener('click', eventListener);
     return element;
+  }
+
+  function handleButtonState(event) {
+    if (event.target.value) {
+      event.target.nextElementSibling.removeAttribute('disabled');
+    } else {
+      event.target.nextElementSibling.setAttribute('disabled','disabled');
+    }
   }
 })(typeof(window) !== 'undefined' ? window : global);
 
@@ -3660,7 +3693,7 @@ Math.uuid = function (len, radix) {
       }
       return this.storage.get(this.makePath(path), maxAge).then(
         function(status, body) {
-          return (status === 404) ? undefined : body;
+          return (status === 404) ? {} : body;
         }
       );
     },
@@ -3698,7 +3731,7 @@ Math.uuid = function (len, radix) {
       }
 
       return this.storage.get(this.makePath(path), maxAge).then(function(status, body) {
-        if (status === 404) { return; }
+        if (status === 404) { return {}; }
         if (typeof(body) === 'object') {
           var promise = promising();
           var count = Object.keys(body).length, i = 0;
@@ -3888,7 +3921,7 @@ Math.uuid = function (len, radix) {
      *   Now that is what the *type* is for.
      *
      *   Within remoteStorage.js, @context values are built using three components:
-     *     http://remotestoragejs.com/spec/modules/ - A prefix to guarantee unqiueness
+     *     http://remotestorage.io/spec/modules/ - A prefix to guarantee uniqueness
      *     the module name     - module names should be unique as well
      *     the type given here - naming this particular kind of object within this module
      *
@@ -3919,9 +3952,7 @@ Math.uuid = function (len, radix) {
           return promising(function(p) { p.reject(validationResult); });
         }
       } catch(exc) {
-        if (! (exc instanceof RS.BaseClient.Types.SchemaNotFound)) {
-          return promising().reject(exc);
-        }
+        return promising().reject(exc);
       }
 
       return this.storage.put(this.makePath(path), object, 'application/json; charset=UTF-8').then(function(status, _body, _mimeType, revision) {
@@ -3983,7 +4014,9 @@ Math.uuid = function (len, radix) {
     },
 
     _fireChange: function(event) {
-      this._emit('change', event);
+      if (RemoteStorage.config.changeEvents[event.origin]) {
+        this._emit('change', event);
+      }
     },
 
     _cleanPath: RS.WireClient.cleanPath,
@@ -4216,11 +4249,11 @@ Math.uuid = function (len, radix) {
     },
 
     _defaultTypeURI: function(alias) {
-      return 'http://remotestoragejs.com/spec/modules/' + this.moduleName + '/' + alias;
+      return 'http://remotestorage.io/spec/modules/' + encodeURIComponent(this.moduleName) + '/' + encodeURIComponent(alias);
     },
 
     _attachType: function(object, alias) {
-      object['@context'] = RemoteStorage.BaseClient.Types.resolveAlias(alias) || this._defaultTypeURI(alias);
+      object['@context'] = RemoteStorage.BaseClient.Types.resolveAlias(this.moduleName + '/' + alias) || this._defaultTypeURI(alias);
     }
   });
 
@@ -4858,7 +4891,7 @@ Math.uuid = function (len, radix) {
         // keep/revert:
         RemoteStorage.log('[Sync] Emitting keep/revert');
 
-        this.local._emit('change', {
+        this.local._emitChange({
           origin:         'conflict',
           path:           node.path,
           oldValue:       node.local.body,
@@ -4890,7 +4923,7 @@ Math.uuid = function (len, radix) {
             }
           } else {
             if (node.remote.body !== undefined) {
-              this.local._emit('change', {
+              this.local._emitChange({
                 origin:   'remote',
                 path:     node.path,
                 oldValue: (node.common.body === false ? undefined : node.common.body),
@@ -4903,7 +4936,7 @@ Math.uuid = function (len, radix) {
           }
         }
       } else {
-        this.local._emit('change', {
+        this.local._emitChange({
           origin:   'remote',
           path:     node.path,
           oldValue: (node.common.body === false ? undefined : node.common.body),
@@ -5206,7 +5239,8 @@ Math.uuid = function (len, radix) {
       return {
         successful: (series === 2 || statusCode === 304 || statusCode === 412 || statusCode === 404),
         conflict:   (statusCode === 412),
-        unAuth:     (statusCode === 401 || statusCode === 402 ||statusCode === 403),
+        unAuth:     ((statusCode === 401 && remote.token !== RemoteStorage.Authorize.IMPLIED_FAKE_TOKEN)
+            || statusCode === 402 ||statusCode === 403),
         notFound:   (statusCode === 404),
         changed:    (statusCode !== 304)
       };
@@ -5830,7 +5864,7 @@ Math.uuid = function (len, radix) {
           var node = nodes[path];
 
           if (node && node.common && node.local) {
-            this._emit('change', {
+            this._emitChange({
               path:     node.path,
               origin:   'local',
               oldValue: (node.local.body === false ? undefined : node.local.body),
@@ -5843,13 +5877,22 @@ Math.uuid = function (len, radix) {
       }.bind(this));
     },
 
+    _emitChange: function(obj) {
+      if (RemoteStorage.config.changeEvents[obj.origin]) {
+        this._emit('change', obj);
+      }
+    },
+
     fireInitial: function() {
+      if (!RemoteStorage.config.changeEvents.local) {
+        return;
+      }
       this.forAllNodes(function(node) {
         var latest;
         if (isDocument(node.path)) {
           latest = getLatest(node);
           if (latest) {
-            this._emit('change', {
+            this._emitChange({
               path:           node.path,
               origin:         'local',
               oldValue:       undefined,
@@ -5926,7 +5969,7 @@ Math.uuid = function (len, radix) {
 
     _emitChangeEvents: function(events) {
       for (var i=0; i<events.length; i++) {
-        this._emit('change', events[i]);
+        this._emitChange(events[i]);
         if (this.diffHandler) {
           this.diffHandler(events[i].path);
         }
@@ -6029,9 +6072,7 @@ Math.uuid = function (len, radix) {
    *       distinguish create/update/delete operations and analyze changes in
    *       change handlers. In addition they carry a "origin" property, which
    *       is either "window", "local", or "remote". "remote" events are fired
-   *       whenever a change comes in from RemoteStorage.Sync. In the future,
-   *       "device" origin events will also be fired for changes happening in
-   *       other windows on the same device.
+   *       whenever a change comes in from RemoteStorage.Sync.
    *
    *   The sync interface (also on RemoteStorage.IndexedDB object):
    *     - #getNodes([paths]) returns the requested nodes in a promise.
@@ -6583,6 +6624,7 @@ Math.uuid = function (len, radix) {
   function loadTable(table, storage, paths) {
     table.setAttribute('border', '1');
     table.style.margin = '8px';
+    table.style.color = 'white';
     table.innerHTML = '';
     var thead = document.createElement('thead');
     table.appendChild(thead);
@@ -6665,13 +6707,13 @@ Math.uuid = function (len, radix) {
     wrapper.appendChild(list);
 
     function updateList() {
-      local.changesBelow('/').then(function(changes) {
-        list.innerHTML = '';
-        changes.forEach(function(change) {
+      list.innerHTML = '';
+      local.forAllNodes(function(node) {
+        if (node.local && node.local.body) {
           var el = document.createElement('li');
-          el.textContent = JSON.stringify(change);
+          el.textContent = JSON.stringify(node.local);
           list.appendChild(el);
-        });
+        }
       });
     }
 
@@ -6718,16 +6760,23 @@ Math.uuid = function (len, radix) {
 
     widget.appendChild(controls);
 
+    var remoteRootPaths = [];
+    for (var path in this.caching._rootPaths) {
+      if (this.caching._rootPaths.hasOwnProperty(path)) {
+        remoteRootPaths.push(path);
+      }
+    }
+
     var remoteTable = document.createElement('table');
     var localTable = document.createElement('table');
-    widget.appendChild(renderWrapper("Remote", remoteTable, this.remote, this.caching.rootPaths));
+    widget.appendChild(renderWrapper("Remote", remoteTable, this.remote, remoteRootPaths));
     if (this.local) {
       widget.appendChild(renderWrapper("Local", localTable, this.local, ['/']));
       widget.appendChild(renderLocalChanges(this.local));
 
       syncButton.onclick = function() {
         this.log('sync clicked');
-        this.sync().then(function() {
+        this.sync.sync().then(function() {
           this.log('SYNC FINISHED');
           loadTable(localTable, this.local, ['/']);
         }.bind(this), function(err) {
