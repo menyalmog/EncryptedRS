@@ -19,8 +19,7 @@ RemoteStorage.defineModule('encryptedrs', function(privateClient) {
 
       on: privateClient.on,
 
-      addSecret: function(name) {
-        var id = '' + Date.now();
+      addSecret: function(id, name) {
         return privateClient.storeObject('secret', id, {
           name: name
         });

@@ -74,10 +74,13 @@
   }
 
   function addSecret(name) {
+    var id = '' + Date.now();
+
     if (remoteStorage.widget.view.cipher) {
       name = sjcl.encrypt(remoteStorage.widget.view.userSecretKey, name, { 'mode': 'gcm' });
     }
-    remoteStorage.encryptedrs.addSecret(name);
+    remoteStorage.encryptedrs.addSecret(id, name);
+    displaySecret(id, name);
   }
 
   function removeSecret(id) {
@@ -85,8 +88,10 @@
   }
 
   function displaySecrets(secrets) {
-    for(var secretId in secrets) {
-      displaySecret(secretId, secrets[secretId].name);
+    for (var secretId in secrets) {
+      if (secrets[secretId]) {
+        displaySecret(secretId, secrets[secretId].name);
+      }
     }
   }
 
