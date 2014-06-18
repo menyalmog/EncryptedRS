@@ -21,7 +21,7 @@
     remoteStorage.displayWidget({'domID': 'remotestorage-connect', 'encryption': true});
     remoteStorage.encryptedrs.init();
     remoteStorage.encryptedrs.on('change', function(event) {
-      if (!remoteStorage.widget.view.cipher || remoteStorage.widget.view.userSecretKey) {
+      if (!remoteStorage.widget.view.cipher || typeof remoteStorage.widget.view.userSecretKey !== 'undefined') {
         // add
         if(event.newValue && (! event.oldValue)) {
           displaySecret(event.relativePath, event.newValue.name);
@@ -56,15 +56,19 @@
       });
 
       ulElement.addEventListener('click', function(event) {
-        if(event.target.tagName === 'SPAN') {
-          removeSecret(unprefixId(event.target.parentNode.id));
+        if (event.target.tagName === 'SPAN') {
+          var id = unprefixId(event.target.parentNode.id);
+
+          removeSecret(id);
+          undisplaySecret(id);
         }
       });
 
       formElement.addEventListener('submit', function(event) {
         event.preventDefault();
         var trimmedText = inputElement.value.trim();
-        if(trimmedText) {
+
+        if (trimmedText) {
           addSecret(trimmedText);
         }
         inputElement.value = '';
