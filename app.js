@@ -17,6 +17,14 @@
     inputElement = formElement.getElementsByTagName('input')[0];
     ulElement = document.getElementById('secret-list');
 
+    remoteStorage.setApiKeys('googledrive', {
+      client_id: '112380171307-be716p12intbm7afk4ucsltn8g043n52.apps.googleusercontent.com'
+    });
+
+    remoteStorage.setApiKeys('dropbox', {
+      api_key: 'm35odvobcg9e8wc'
+    });
+
     remoteStorage.access.claim('encryptedrs', 'rw');
     remoteStorage.displayWidget({'domID': 'remotestorage-connect', 'encryption': true});
     remoteStorage.encryptedrs.init();

@@ -9,8 +9,8 @@ var client = new Keen({
 var visit = {
     referrer: document.referrer,
     page: window.location.href,
-    agent: window.navigator.userAgent
-    platform: window.navigator.platform
+    agent: window.navigator.userAgent,
+    platform: window.navigator.platform,
     keen: {
         timestamp: new Date().toISOString()
     }
